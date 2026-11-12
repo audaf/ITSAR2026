@@ -3,6 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Movimento del giocatore con CharacterController e nuovo Input System.
 /// Il movimento è relativo alla camera: "su" significa sempre "verso l'alto dello schermo".
+/// Supporta modificatori esterni di velocità e scivolamento (usati da AreaEffect).
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
@@ -20,6 +21,16 @@ public class PlayerController : MonoBehaviour
     private GameControls controls;
     private float verticalVelocity;
 
+    // --- Modificatori esterni ---
+    private float speedMultiplier = 1f;
+    private float speedModifierEndTime;
+
+    private float slideEndTime;
+    private float slideAcceleration;
+    private Vector3 horizontalVelocity;
+
+    private const float SlideGrace = 0.15f; // tolleranza tra un OnTriggerStay e l'altro
+
     private void Awake()
     {
         controller = GetComponent<CharacterController>();
@@ -36,6 +47,20 @@ public class PlayerController : MonoBehaviour
     private void OnDisable() => controls.Player.Disable();
     private void OnDestroy() => controls.Dispose();
 
+    /// <summary>Imposta un moltiplicatore di velocità (<1 rallenta, >1 accelera) per 'duration' secondi.</summary>
+    public void ApplySpeedModifier(float multiplier, float duration)
+    {
+        speedMultiplier = multiplier;
+        speedModifierEndTime = Time.time + duration;
+    }
+
+    /// <summary>Attiva lo scivolamento. Va chiamato finché il player è sulla superficie scivolosa.</summary>
+    public void ApplySlide(float acceleration)
+    {
+        slideAcceleration = acceleration;
+        slideEndTime = Time.time + SlideGrace;
+    }
+
     private void Update()
     {
         Vector2 input = controls.Player.Move.ReadValue<Vector2>();
@@ -47,6 +72,24 @@ public class PlayerController : MonoBehaviour
             speed *= sprintMultiplier;
         }
 
+        // Il modificatore scade da solo.
+        if (Time.time >= speedModifierEndTime)
+        {
+            speedMultiplier = 1f;
+        }
+        speed *= speedMultiplier;
+
+        // Velocità orizzontale: normale, oppure con inerzia se si sta scivolando.
+        Vector3 targetVelocity = direction * speed;
+        if (Time.time < slideEndTime)
+        {
+            horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, targetVelocity, slideAcceleration * Time.deltaTime);
+        }
+        else
+        {
+            horizontalVelocity = targetVelocity;
+        }
+
         // Gravità applicata a mano: il CharacterController non usa la fisica.
         if (controller.isGrounded && verticalVelocity < 0f)
         {
@@ -54,7 +97,7 @@ public class PlayerController : MonoBehaviour
         }
         verticalVelocity += gravity * Time.deltaTime;
 
-        Vector3 velocity = direction * speed + Vector3.up * verticalVelocity;
+        Vector3 velocity = horizontalVelocity + Vector3.up * verticalVelocity;
         controller.Move(velocity * Time.deltaTime);
 
         if (direction.sqrMagnitude > 0.001f)
