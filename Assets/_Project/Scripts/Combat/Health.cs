@@ -12,7 +12,7 @@ public class Health : MonoBehaviour
     private bool destroyOnDeath;
 
     public float Current { get; private set; }
-    public float Max => maxHealth;
+    public float Max => maxHealth;s
     public bool IsDead => Current <= 0f;
 
     [SerializeField] bool isPlayer = false;
